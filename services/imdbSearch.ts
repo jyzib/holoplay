@@ -40,13 +40,27 @@ function mapSuggestion(item: ImdbSuggestionItem): ImdbTitleResult {
   };
 }
 
+function buildSearchUrl(query: string): string {
+  const trimmed = query.trim().toLowerCase();
+  const firstChar = trimmed[0];
+  const encoded = encodeURIComponent(trimmed);
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+    if (!isLocal) {
+      return `/api/imdb-suggest?q=${encodeURIComponent(trimmed)}`;
+    }
+  }
+
+  return `${IMDB_SUGGESTION_BASE}/${firstChar}/${encoded}.json?includeVideos=1`;
+}
+
 export async function searchImdbTitles(query: string): Promise<ImdbTitleResult[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  const firstChar = trimmed[0].toLowerCase();
-  const encoded = encodeURIComponent(trimmed.toLowerCase());
-  const url = `${IMDB_SUGGESTION_BASE}/${firstChar}/${encoded}.json?includeVideos=1`;
+  const url = buildSearchUrl(trimmed);
 
   const response = await fetch(url, {
     headers: {
