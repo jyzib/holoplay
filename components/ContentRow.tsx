@@ -1,3 +1,4 @@
+import { memo, useCallback } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, typography } from '../constants/theme';
 import { PosterCard } from './PosterCard';
@@ -17,7 +18,25 @@ interface ContentRowProps {
   onItemPress: (item: ContentRowItem) => void;
 }
 
-export function ContentRow({ title, items, onItemPress }: ContentRowProps) {
+export const ContentRow = memo(function ContentRow({
+  title,
+  items,
+  onItemPress,
+}: ContentRowProps) {
+  const renderItem = useCallback(
+    ({ item }: { item: ContentRowItem }) => (
+      <PosterCard
+        title={item.title}
+        posterUrl={item.posterUrl}
+        subtitle={item.subtitle}
+        progress={item.progress}
+        duration={item.duration}
+        onPress={() => onItemPress(item)}
+      />
+    ),
+    [onItemPress]
+  );
+
   if (items.length === 0) return null;
 
   return (
@@ -29,20 +48,20 @@ export function ContentRow({ title, items, onItemPress }: ContentRowProps) {
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <PosterCard
-            title={item.title}
-            posterUrl={item.posterUrl}
-            subtitle={item.subtitle}
-            progress={item.progress}
-            duration={item.duration}
-            onPress={() => onItemPress(item)}
-          />
-        )}
+        renderItem={renderItem}
+        initialNumToRender={5}
+        maxToRenderPerBatch={4}
+        windowSize={3}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={(_, index) => ({
+          length: 130,
+          offset: 130 * index,
+          index,
+        })}
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

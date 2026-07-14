@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../constants/theme';
+import { getPosterImageUrl } from '../services/images';
 import type { ImdbTitleResult } from '../types/imdb';
 
 interface SearchResultRowProps {
@@ -17,18 +18,22 @@ export function SearchResultRow({
   onPlay,
   variant = 'card',
 }: SearchResultRowProps) {
+  const optimizedPosterUrl = getPosterImageUrl(item.posterUrl, 240);
+
   if (variant === 'netflix') {
     return (
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [styles.netflixRow, pressed && styles.pressed]}
       >
-        {item.posterUrl ? (
+        {optimizedPosterUrl ? (
           <Image
-            source={{ uri: item.posterUrl }}
+            source={{ uri: optimizedPosterUrl }}
             style={styles.netflixPoster}
             contentFit="cover"
-            transition={150}
+            cachePolicy="memory-disk"
+            recyclingKey={optimizedPosterUrl}
+            transition={100}
           />
         ) : (
           <View style={[styles.netflixPoster, styles.posterPlaceholder]} />
@@ -54,12 +59,14 @@ export function SearchResultRow({
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      {item.posterUrl ? (
+      {optimizedPosterUrl ? (
         <Image
-          source={{ uri: item.posterUrl }}
+          source={{ uri: optimizedPosterUrl }}
           style={styles.poster}
           contentFit="cover"
-          transition={150}
+          cachePolicy="memory-disk"
+          recyclingKey={optimizedPosterUrl}
+          transition={100}
         />
       ) : (
         <View style={[styles.poster, styles.posterPlaceholder]} />

@@ -10,6 +10,12 @@ export const VIDAPI_BASE = 'https://vidapi.ru';
 export const PLAYER_BASE = 'https://vaplayer.ru';
 
 const IMDB_PATTERN = /^tt\d{7,8}$/i;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const responseCache = new Map<
+  string,
+  { data: unknown; expiresAt: number }
+>();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 export function isValidImdbId(id: string): boolean {
   return IMDB_PATTERN.test(id.trim());
@@ -55,11 +61,33 @@ export function buildEmbedUrl(
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${VIDAPI_BASE}${path}`);
-  if (!response.ok) {
-    throw new Error(`VidAPI error: ${response.status}`);
+  const cached = responseCache.get(path);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data as T;
   }
-  return response.json() as Promise<T>;
+
+  const pending = pendingRequests.get(path);
+  if (pending) return pending as Promise<T>;
+
+  const request = fetch(`${VIDAPI_BASE}${path}`)
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`VidAPI error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as T;
+      responseCache.set(path, {
+        data,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+      return data;
+    })
+    .finally(() => {
+      pendingRequests.delete(path);
+    });
+
+  pendingRequests.set(path, request);
+  return request;
 }
 
 export function fetchLatestMovies(page = 1): Promise<PaginatedResponse<MovieItem>> {

@@ -10,6 +10,7 @@ import { Header } from '../../components/Header';
 import { LoadingState } from '../../components/LoadingState';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { colors, radius, spacing, typography } from '../../constants/theme';
+import { getHeroImageUrl } from '../../services/images';
 import { fetchLatestMovies, getProgressKey } from '../../services/vidapi';
 import { getProgress } from '../../services/watchProgress';
 import type { MovieItem } from '../../types/vidapi';
@@ -68,12 +69,21 @@ export default function MovieDetailScreen() {
   if (loading) return <LoadingState />;
   if (!movie) return null;
 
+  const heroImageUrl = getHeroImageUrl(movie.poster_url);
+
   return (
     <View style={styles.container}>
       <ScrollView bounces={false}>
         <View style={styles.hero}>
-          {movie.poster_url ? (
-            <Image source={{ uri: movie.poster_url }} style={styles.poster} contentFit="cover" />
+          {heroImageUrl ? (
+            <Image
+              source={{ uri: heroImageUrl }}
+              style={styles.poster}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+            />
           ) : (
             <View style={[styles.poster, styles.posterPlaceholder]} />
           )}

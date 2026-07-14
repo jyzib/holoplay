@@ -17,12 +17,12 @@ export function IntroSplash({ onFinish }: IntroSplashProps) {
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 750,
+          duration: 450,
           useNativeDriver: true,
         }),
         Animated.timing(creditOpacity, {
           toValue: 1,
-          duration: 750,
+          duration: 450,
           useNativeDriver: true,
         }),
         Animated.spring(logoScale, {
@@ -32,10 +32,10 @@ export function IntroSplash({ onFinish }: IntroSplashProps) {
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(900),
+      Animated.delay(500),
       Animated.timing(screenOpacity, {
         toValue: 0,
-        duration: 500,
+        duration: 300,
         useNativeDriver: true,
       }),
     ]);

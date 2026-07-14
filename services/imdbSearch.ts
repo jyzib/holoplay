@@ -5,6 +5,11 @@ import type {
 } from '../types/imdb';
 
 const IMDB_SUGGESTION_BASE = 'https://v3.sg.media-imdb.com/suggestion';
+const searchCache = new Map<
+  string,
+  { results: ImdbTitleResult[]; expiresAt: number }
+>();
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 
 const TV_QIDS = new Set([
   'tvSeries',
@@ -60,7 +65,13 @@ export async function searchImdbTitles(query: string): Promise<ImdbTitleResult[]
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  const url = buildSearchUrl(trimmed);
+  const cacheKey = trimmed.toLowerCase();
+  const cached = searchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.results;
+  }
+
+  const url = buildSearchUrl(cacheKey);
 
   const response = await fetch(url, {
     headers: {
@@ -73,5 +84,10 @@ export async function searchImdbTitles(query: string): Promise<ImdbTitleResult[]
   }
 
   const data = (await response.json()) as ImdbSuggestionResponse;
-  return (data.d ?? []).filter(isTitleResult).map(mapSuggestion);
+  const results = (data.d ?? []).filter(isTitleResult).map(mapSuggestion);
+  searchCache.set(cacheKey, {
+    results,
+    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+  });
+  return results;
 }

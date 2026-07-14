@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, poster, spacing, typography } from '../constants/theme';
+import { getHeroImageUrl } from '../services/images';
 
 interface HeroBannerProps {
   title: string;
@@ -25,10 +26,19 @@ export function HeroBanner({
   onMoreInfo,
   resumeLabel,
 }: HeroBannerProps) {
+  const optimizedPosterUrl = getHeroImageUrl(posterUrl);
+
   return (
     <View style={styles.container}>
-      {posterUrl ? (
-        <Image source={{ uri: posterUrl }} style={styles.image} contentFit="cover" />
+      {optimizedPosterUrl ? (
+        <Image
+          source={{ uri: optimizedPosterUrl }}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          priority="high"
+          transition={150}
+        />
       ) : (
         <View style={[styles.image, styles.placeholder]} />
       )}

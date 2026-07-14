@@ -31,6 +31,19 @@ import { getAllProgress } from '../../services/watchProgress';
 import type { ImdbTitleResult } from '../../types/imdb';
 import type { EpisodeItem, MovieItem, TvShowItem } from '../../types/vidapi';
 
+function buildProgressMap(
+  progress: Awaited<ReturnType<typeof getAllProgress>>
+): Record<string, { progress: number; duration: number }> {
+  const map: Record<string, { progress: number; duration: number }> = {};
+  for (const entry of progress) {
+    map[entry.id] = {
+      progress: entry.progress,
+      duration: entry.duration,
+    };
+  }
+  return map;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -70,18 +83,41 @@ export default function HomeScreen() {
     setTvShows(tvData.items);
     setEpisodes(episodesData.items);
 
-    const map: Record<string, { progress: number; duration: number }> = {};
-    for (const entry of progress) {
-      map[entry.id] = { progress: entry.progress, duration: entry.duration };
-    }
-    setProgressMap(map);
+    setProgressMap(buildProgressMap(progress));
   }, []);
 
   useEffect(() => {
-    loadContent()
+    let active = true;
+
+    // Movies power the hero and first row, so render them as soon as they arrive.
+    Promise.all([fetchLatestMovies(1), getAllProgress()])
+      .then(([moviesData, progress]) => {
+        if (!active) return;
+        setMovies(moviesData.items);
+        setProgressMap(buildProgressMap(progress));
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [loadContent]);
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    // Secondary rows load independently instead of blocking the first paint.
+    fetchLatestTvShows(1)
+      .then((data) => {
+        if (active) setTvShows(data.items);
+      })
+      .catch(() => {});
+
+    fetchLatestEpisodes(1)
+      .then((data) => {
+        if (active) setEpisodes(data.items);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, poster, radius, typography } from '../constants/theme';
+import { getPosterImageUrl } from '../services/images';
 
 interface PosterCardProps {
   title: string;
@@ -18,7 +20,7 @@ const SIZES = {
   large: { width: 140, height: 210 },
 };
 
-export function PosterCard({
+export const PosterCard = memo(function PosterCard({
   title,
   posterUrl,
   subtitle,
@@ -28,6 +30,10 @@ export function PosterCard({
   size = 'medium',
 }: PosterCardProps) {
   const dimensions = SIZES[size];
+  const optimizedPosterUrl = getPosterImageUrl(
+    posterUrl,
+    size === 'large' ? 342 : 185
+  );
   const progressPct =
     progress != null && duration != null && duration > 0
       ? Math.min((progress / duration) * 100, 100)
@@ -39,12 +45,15 @@ export function PosterCard({
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
     >
       <View style={[styles.posterWrap, dimensions]}>
-        {posterUrl ? (
+        {optimizedPosterUrl ? (
           <Image
-            source={{ uri: posterUrl }}
+            source={{ uri: optimizedPosterUrl }}
             style={[styles.poster, dimensions]}
             contentFit="cover"
-            transition={200}
+            cachePolicy="memory-disk"
+            recyclingKey={optimizedPosterUrl}
+            priority="low"
+            transition={120}
           />
         ) : (
           <View style={[styles.poster, styles.placeholder, dimensions]} />
@@ -61,7 +70,7 @@ export function PosterCard({
       ) : null}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

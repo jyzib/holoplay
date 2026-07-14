@@ -11,6 +11,7 @@ import { LoadingState } from '../../components/LoadingState';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { SeasonEpisodePicker } from '../../components/SeasonEpisodePicker';
 import { colors, spacing, typography } from '../../constants/theme';
+import { getHeroImageUrl } from '../../services/images';
 import { fetchLatestTvShows, getProgressKey } from '../../services/vidapi';
 import { getProgress } from '../../services/watchProgress';
 import type { TvShowItem } from '../../types/vidapi';
@@ -77,12 +78,21 @@ export default function TvDetailScreen() {
   if (loading) return <LoadingState />;
   if (!show) return null;
 
+  const heroImageUrl = getHeroImageUrl(show.poster_url);
+
   return (
     <View style={styles.container}>
       <ScrollView bounces={false}>
         <View style={styles.hero}>
-          {show.poster_url ? (
-            <Image source={{ uri: show.poster_url }} style={styles.poster} contentFit="cover" />
+          {heroImageUrl ? (
+            <Image
+              source={{ uri: heroImageUrl }}
+              style={styles.poster}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={150}
+            />
           ) : (
             <View style={[styles.poster, styles.posterPlaceholder]} />
           )}
