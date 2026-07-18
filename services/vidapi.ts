@@ -7,7 +7,7 @@ import type {
 } from '../types/vidapi';
 
 export const VIDAPI_BASE = 'https://vidapi.ru';
-export const PLAYER_BASE = 'https://vaplayer.ru';
+export const PLAYER_BASE = 'https://player.imdb.su';
 
 const IMDB_PATTERN = /^tt\d{7,8}$/i;
 const CACHE_TTL_MS = 5 * 60 * 1000;

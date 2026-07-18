@@ -46,8 +46,8 @@ TV shows include a season/episode picker before playback.
 | Latest movies | `vidapi.ru/movies/latest/page-1.json` |
 | Latest TV shows | `vidapi.ru/tvshows/latest/page-1.json` |
 | Latest episodes | `vidapi.ru/episodes/latest/page-1.json` |
-| Movie player | `vaplayer.ru/embed/movie/{imdb_id}` |
-| TV player | `vaplayer.ru/embed/tv/{imdb_id}/{season}/{episode}` |
+| Movie player | `player.imdb.su/embed/movie/{imdb_id}` |
+| TV player | `player.imdb.su/embed/tv/{imdb_id}/{season}/{episode}` |
 
 Progress is tracked via VidAPI `PLAYER_EVENT` postMessage events and stored in AsyncStorage.
 
