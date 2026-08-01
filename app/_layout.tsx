@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GoogleTagManager } from '../components/GoogleTagManager';
 import { IntroSplash } from '../components/IntroSplash';
 import { colors } from '../constants/theme';
 
@@ -12,6 +13,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <GoogleTagManager />
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000000' }}>
         <StatusBar style="light" />
         <Stack
