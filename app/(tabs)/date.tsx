@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +20,8 @@ import { normalizeDateCode } from '../../services/dateSync';
 
 export default function DateScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 420;
   const {
     supported,
     code,
@@ -88,15 +92,31 @@ export default function DateScreen() {
           ? colors.warning
           : colors.textMuted;
 
+  const tabBarSpace = 72 + Math.max(insets.bottom, 10);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <Header title="Movie Date" />
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: tabBarSpace + spacing.lg },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.hero}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="heart" size={28} color={colors.netflixRed} />
+          <View style={[styles.iconWrap, isNarrow && styles.iconWrapSmall]}>
+            <Ionicons
+              name="heart"
+              size={isNarrow ? 22 : 28}
+              color={colors.netflixRed}
+            />
           </View>
-          <Text style={styles.title}>Watch together</Text>
+          <Text style={[styles.title, isNarrow && styles.titleSmall]}>
+            Watch together
+          </Text>
           <Text style={styles.subtitle}>
             Share one code. When either of you presses play, pause, or seek, both
             devices stay in sync.
@@ -115,9 +135,11 @@ export default function DateScreen() {
           <>
             <View style={styles.card}>
               <Text style={styles.namesTitle}>Chat names</Text>
-              <View style={styles.namesRow}>
+              <View
+                style={[styles.namesRow, isNarrow && styles.namesRowStacked]}
+              >
                 <TextInput
-                  style={styles.nameInput}
+                  style={[styles.nameInput, isNarrow && styles.nameInputStacked]}
                   value={myNameDraft}
                   onChangeText={setMyNameDraft}
                   onBlur={onSaveNames}
@@ -126,7 +148,7 @@ export default function DateScreen() {
                   maxLength={24}
                 />
                 <TextInput
-                  style={styles.nameInput}
+                  style={[styles.nameInput, isNarrow && styles.nameInputStacked]}
                   value={theirNameDraft}
                   onChangeText={setTheirNameDraft}
                   onBlur={onSaveNames}
@@ -136,15 +158,14 @@ export default function DateScreen() {
                 />
               </View>
               <Text style={styles.namesHint}>
-                Chat will show “{theirNameDraft.trim() || 'Them'} ·” instead of
-                Partner
+                Chat shows “{theirNameDraft.trim() || 'Them'} ·” instead of Partner
               </Text>
             </View>
 
             <View style={styles.card}>
               <View style={styles.statusRow}>
                 <View style={[styles.dot, { backgroundColor: statusColor }]} />
-                <Text style={styles.statusText}>
+                <Text style={styles.statusText} numberOfLines={2}>
                   {status === 'idle' && 'Not paired'}
                   {status === 'connecting' && 'Connecting…'}
                   {status === 'waiting' && 'Waiting for partner'}
@@ -158,7 +179,12 @@ export default function DateScreen() {
               {code ? (
                 <View style={styles.codeBox}>
                   <Text style={styles.codeLabel}>Your date code</Text>
-                  <Text style={styles.code}>{code}</Text>
+                  <Text
+                    style={[styles.code, isNarrow && styles.codeSmall]}
+                    selectable
+                  >
+                    {code}
+                  </Text>
                   <Text style={styles.codeHint}>
                     {partnerConnected
                       ? `${theirName} is connected — pick a movie and press Play.`
@@ -177,11 +203,13 @@ export default function DateScreen() {
                   disabled={busy}
                 />
                 <Text style={styles.or}>or join with a code</Text>
-                <View style={styles.joinRow}>
+                <View style={[styles.joinRow, isNarrow && styles.joinRowStacked]}>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, isNarrow && styles.inputStacked]}
                     value={joinCode}
-                    onChangeText={(t) => setJoinCode(normalizeDateCode(t).slice(0, 8))}
+                    onChangeText={(t) =>
+                      setJoinCode(normalizeDateCode(t).slice(0, 8))
+                    }
                     placeholder="e.g. LOVE42"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="characters"
@@ -189,7 +217,11 @@ export default function DateScreen() {
                     maxLength={8}
                   />
                   <Pressable
-                    style={[styles.joinBtn, busy && styles.joinBtnDisabled]}
+                    style={[
+                      styles.joinBtn,
+                      isNarrow && styles.joinBtnStacked,
+                      busy && styles.joinBtnDisabled,
+                    ]}
                     onPress={() => void onJoin()}
                     disabled={busy}
                   >
@@ -202,9 +234,11 @@ export default function DateScreen() {
                 {!partnerConnected ? (
                   <>
                     <Text style={styles.or}>Different code?</Text>
-                    <View style={styles.joinRow}>
+                    <View
+                      style={[styles.joinRow, isNarrow && styles.joinRowStacked]}
+                    >
                       <TextInput
-                        style={styles.input}
+                        style={[styles.input, isNarrow && styles.inputStacked]}
                         value={joinCode}
                         onChangeText={(t) =>
                           setJoinCode(normalizeDateCode(t).slice(0, 8))
@@ -216,7 +250,11 @@ export default function DateScreen() {
                         maxLength={8}
                       />
                       <Pressable
-                        style={[styles.joinBtn, busy && styles.joinBtnDisabled]}
+                        style={[
+                          styles.joinBtn,
+                          isNarrow && styles.joinBtnStacked,
+                          busy && styles.joinBtnDisabled,
+                        ]}
                         onPress={() => void onJoin()}
                         disabled={busy}
                       >
@@ -246,8 +284,9 @@ export default function DateScreen() {
             </View>
           </>
         )}
-      </View>
-      <FooterCredit />
+
+        <FooterCredit />
+      </ScrollView>
     </View>
   );
 }
@@ -257,15 +296,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scroll: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.lg,
+  },
+  content: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   hero: {
     alignItems: 'center',
     gap: spacing.sm,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   iconWrap: {
     width: 56,
@@ -274,25 +319,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs,
+  },
+  iconWrapSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   title: {
     ...typography.title,
     color: colors.text,
+    textAlign: 'center',
+  },
+  titleSmall: {
+    fontSize: 20,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+    paddingHorizontal: spacing.xs,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
+    padding: spacing.md,
     gap: spacing.sm,
+    width: '100%',
   },
   cardTitle: {
     ...typography.subtitle,
@@ -310,18 +365,26 @@ const styles = StyleSheet.create({
   namesRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    width: '100%',
+  },
+  namesRowStacked: {
+    flexDirection: 'column',
   },
   nameInput: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: 12,
     color: colors.text,
     fontSize: 15,
-    outlineStyle: 'none' as never,
+  },
+  nameInputStacked: {
+    flex: undefined,
+    width: '100%',
   },
   namesHint: {
     ...typography.caption,
@@ -331,6 +394,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   dot: {
     width: 10,
@@ -340,6 +404,7 @@ const styles = StyleSheet.create({
   statusText: {
     ...typography.subtitle,
     color: colors.text,
+    flexShrink: 1,
   },
   detail: {
     ...typography.caption,
@@ -350,8 +415,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceElevated,
+    width: '100%',
   },
   codeLabel: {
     ...typography.label,
@@ -359,20 +426,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   code: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800',
-    letterSpacing: 6,
+    letterSpacing: 4,
     color: colors.text,
+    textAlign: 'center',
+    flexWrap: 'wrap',
     fontFamily: Platform.select({ web: 'monospace', default: undefined }),
+  },
+  codeSmall: {
+    fontSize: 26,
+    letterSpacing: 3,
   },
   codeHint: {
     ...typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   actions: {
     gap: spacing.md,
+    width: '100%',
   },
   or: {
     ...typography.caption,
@@ -382,27 +456,42 @@ const styles = StyleSheet.create({
   joinRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  joinRowStacked: {
+    flexDirection: 'column',
   },
   input: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: 12,
     color: colors.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: 2,
     textAlign: 'center',
-    outlineStyle: 'none' as never,
+  },
+  inputStacked: {
+    flex: undefined,
+    width: '100%',
   },
   joinBtn: {
     backgroundColor: colors.netflixRed,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 48,
+  },
+  joinBtnStacked: {
+    width: '100%',
+    paddingVertical: 12,
   },
   joinBtnDisabled: {
     opacity: 0.6,
@@ -426,7 +515,7 @@ const styles = StyleSheet.create({
   },
   tips: {
     gap: spacing.xs,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.md,
   },
   tipTitle: {
     ...typography.label,
