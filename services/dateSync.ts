@@ -82,11 +82,13 @@ export type DateSyncHandlers = {
   onStatus: (status: DateConnectionStatus, detail?: string) => void;
   onPartner: (connected: boolean) => void;
   onRemoteState: (state: DateSyncState, fromClientId: string) => void;
+  onRemoteName: (name: string) => void;
   onChat: (message: {
     id: string;
     clientId: string;
     text: string;
     createdAt: number;
+    name: string;
   }) => void;
 };
 
@@ -115,6 +117,7 @@ export class DateSyncSession {
   private conn: DataConnectionLike | null = null;
   private clientId = '';
   private code = '';
+  private displayName = 'You';
   private destroyed = false;
   private isHost = false;
   private handlers: DateSyncHandlers;
@@ -122,6 +125,18 @@ export class DateSyncSession {
 
   constructor(handlers: DateSyncHandlers) {
     this.handlers = handlers;
+  }
+
+  setDisplayName(name: string) {
+    const next = name.trim().slice(0, 24) || 'You';
+    this.displayName = next;
+    if (this.conn?.open) {
+      this.send({
+        kind: 'profile',
+        clientId: this.clientId,
+        name: next,
+      });
+    }
   }
 
   async connect(code: string): Promise<void> {
@@ -269,7 +284,11 @@ export class DateSyncSession {
     const onOpen = () => {
       this.handlers.onPartner(true);
       this.handlers.onStatus('paired', 'Paired — play something together');
-      this.send({ kind: 'hello', clientId: this.clientId });
+      this.send({
+        kind: 'hello',
+        clientId: this.clientId,
+        name: this.displayName,
+      });
       this.startPing();
     };
 
@@ -302,9 +321,25 @@ export class DateSyncSession {
   private handleMessage(data: unknown) {
     const msg = data as DateSyncMessage;
     if (!msg || typeof msg !== 'object') return;
-    if (msg.kind === 'hello' || msg.kind === 'ping') {
+    if (msg.kind === 'ping') {
       this.handlers.onPartner(true);
       this.handlers.onStatus('paired', 'Paired — play something together');
+      return;
+    }
+    if (msg.kind === 'hello' || msg.kind === 'profile') {
+      this.handlers.onPartner(true);
+      this.handlers.onStatus('paired', 'Paired — play something together');
+      if (msg.clientId !== this.clientId && msg.name) {
+        this.handlers.onRemoteName(msg.name);
+      }
+      // Reply with our profile when they say hello so both sides learn names
+      if (msg.kind === 'hello' && msg.clientId !== this.clientId) {
+        this.send({
+          kind: 'profile',
+          clientId: this.clientId,
+          name: this.displayName,
+        });
+      }
       return;
     }
     if (msg.kind === 'state' && msg.clientId !== this.clientId) {
@@ -312,11 +347,13 @@ export class DateSyncSession {
       return;
     }
     if (msg.kind === 'chat' && msg.clientId !== this.clientId) {
+      if (msg.name) this.handlers.onRemoteName(msg.name);
       this.handlers.onChat({
         id: msg.id,
         clientId: msg.clientId,
         text: msg.text,
         createdAt: msg.createdAt,
+        name: msg.name || 'Them',
       });
     }
   }
@@ -343,19 +380,21 @@ export class DateSyncSession {
     });
   }
 
-  sendChat(text: string): { id: string; createdAt: number } | null {
+  sendChat(text: string): { id: string; createdAt: number; name: string } | null {
     const trimmed = text.trim();
     if (!trimmed || !this.conn?.open) return null;
     const id = `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const createdAt = Date.now();
+    const name = this.displayName;
     this.send({
       kind: 'chat',
       clientId: this.clientId,
       id,
       text: trimmed.slice(0, 500),
       createdAt,
+      name,
     });
-    return { id, createdAt };
+    return { id, createdAt, name };
   }
 
   private send(message: DateSyncMessage) {

@@ -23,12 +23,14 @@ export interface DateChatMessage {
   clientId: string;
   text: string;
   createdAt: number;
+  senderName: string;
   mine?: boolean;
 }
 
 export type DateSyncMessage =
-  | { kind: 'hello'; clientId: string; name?: string }
+  | { kind: 'hello'; clientId: string; name: string }
   | { kind: 'ping'; clientId: string }
+  | { kind: 'profile'; clientId: string; name: string }
   | { kind: 'state'; clientId: string; state: DateSyncState }
   | {
       kind: 'chat';
@@ -36,6 +38,7 @@ export type DateSyncMessage =
       id: string;
       text: string;
       createdAt: number;
+      name: string;
     };
 
 export type DateConnectionStatus =

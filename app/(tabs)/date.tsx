@@ -30,7 +30,7 @@ export default function DateScreen() {
     partnerConnected,
     myName,
     theirName,
-    setDisplayNames,
+    setMyName,
     createAndJoin,
     joinWithCode,
     leave,
@@ -39,12 +39,10 @@ export default function DateScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [myNameDraft, setMyNameDraft] = useState(myName);
-  const [theirNameDraft, setTheirNameDraft] = useState(theirName);
 
   useEffect(() => {
     setMyNameDraft(myName);
-    setTheirNameDraft(theirName);
-  }, [myName, theirName]);
+  }, [myName]);
 
   const onCreate = useCallback(async () => {
     setError(null);
@@ -76,12 +74,9 @@ export default function DateScreen() {
     }
   }, [joinCode, joinWithCode]);
 
-  const onSaveNames = useCallback(() => {
-    void setDisplayNames({
-      myName: myNameDraft,
-      theirName: theirNameDraft,
-    });
-  }, [myNameDraft, theirNameDraft, setDisplayNames]);
+  const onSaveMyName = useCallback(() => {
+    void setMyName(myNameDraft);
+  }, [myNameDraft, setMyName]);
 
   const statusColor =
     status === 'paired'
@@ -134,32 +129,25 @@ export default function DateScreen() {
         ) : (
           <>
             <View style={styles.card}>
-              <Text style={styles.namesTitle}>Chat names</Text>
-              <View
-                style={[styles.namesRow, isNarrow && styles.namesRowStacked]}
-              >
-                <TextInput
-                  style={[styles.nameInput, isNarrow && styles.nameInputStacked]}
-                  value={myNameDraft}
-                  onChangeText={setMyNameDraft}
-                  onBlur={onSaveNames}
-                  placeholder="Your name"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={24}
-                />
-                <TextInput
-                  style={[styles.nameInput, isNarrow && styles.nameInputStacked]}
-                  value={theirNameDraft}
-                  onChangeText={setTheirNameDraft}
-                  onBlur={onSaveNames}
-                  placeholder="Their name"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={24}
-                />
-              </View>
+              <Text style={styles.namesTitle}>Your chat name</Text>
+              <TextInput
+                style={styles.nameInputFull}
+                value={myNameDraft}
+                onChangeText={setMyNameDraft}
+                onBlur={onSaveMyName}
+                placeholder="e.g. Jazib"
+                placeholderTextColor={colors.textMuted}
+                maxLength={24}
+              />
               <Text style={styles.namesHint}>
-                Chat shows “{theirNameDraft.trim() || 'Them'} ·” instead of Partner
+                Your messages show as “{myNameDraft.trim() || 'You'} ·” on both
+                devices. Their name appears when they set theirs.
               </Text>
+              {partnerConnected && theirName !== 'Them' ? (
+                <Text style={styles.namesHint}>
+                  Connected with {theirName}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.card}>
@@ -362,17 +350,8 @@ const styles = StyleSheet.create({
     ...typography.subtitle,
     color: colors.text,
   },
-  namesRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  nameInputFull: {
     width: '100%',
-  },
-  namesRowStacked: {
-    flexDirection: 'column',
-  },
-  nameInput: {
-    flex: 1,
-    minWidth: 0,
     backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.border,
@@ -381,10 +360,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: colors.text,
     fontSize: 15,
-  },
-  nameInputStacked: {
-    flex: undefined,
-    width: '100%',
   },
   namesHint: {
     ...typography.caption,

@@ -38,7 +38,7 @@ interface DateSyncContextValue {
   chatMessages: DateChatMessage[];
   myName: string;
   theirName: string;
-  setDisplayNames: (names: { myName: string; theirName: string }) => Promise<void>;
+  setMyName: (name: string) => Promise<void>;
   createAndJoin: () => Promise<string>;
   joinWithCode: (code: string) => Promise<void>;
   leave: () => Promise<void>;
@@ -71,8 +71,9 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const [syncState, setSyncState] = useState<DateSyncState>(createEmptySyncState);
   const [remoteRevision, setRemoteRevision] = useState(0);
   const [chatMessages, setChatMessages] = useState<DateChatMessage[]>([]);
-  const [myName, setMyName] = useState('You');
+  const [myName, setMyNameState] = useState('You');
   const [theirName, setTheirName] = useState('Them');
+  const myNameRef = useRef('You');
 
   const teardown = useCallback(() => {
     sessionRef.current?.disconnect();
@@ -81,21 +82,19 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     getChatNames().then((names) => {
-      setMyName(names.myName);
-      setTheirName(names.theirName);
+      setMyNameState(names.myName);
+      myNameRef.current = names.myName;
+      // theirName is filled from the live partner profile
     });
   }, []);
 
-  const setDisplayNames = useCallback(
-    async (names: { myName: string; theirName: string }) => {
-      const nextMine = names.myName.trim().slice(0, 24) || 'You';
-      const nextTheirs = names.theirName.trim().slice(0, 24) || 'Them';
-      setMyName(nextMine);
-      setTheirName(nextTheirs);
-      await saveChatNames({ myName: nextMine, theirName: nextTheirs });
-    },
-    []
-  );
+  const setMyName = useCallback(async (name: string) => {
+    const nextMine = name.trim().slice(0, 24) || 'You';
+    setMyNameState(nextMine);
+    myNameRef.current = nextMine;
+    await saveChatNames({ myName: nextMine, theirName: 'Them' });
+    sessionRef.current?.setDisplayName(nextMine);
+  }, []);
 
   const startSession = useCallback(
     async (nextCode: string) => {
@@ -105,6 +104,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       setPartnerConnected(false);
       setSyncState(createEmptySyncState());
       setChatMessages([]);
+      setTheirName('Them');
       seqRef.current = 0;
       lastRemoteSeqRef.current = -1;
       lastSentRef.current = null;
@@ -123,13 +123,24 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
           setSyncState(state);
           setRemoteRevision((n) => n + 1);
         },
+        onRemoteName: (name) => {
+          const clean = name.trim().slice(0, 24);
+          if (clean) setTheirName(clean);
+        },
         onChat: (message) => {
+          if (message.name?.trim()) {
+            setTheirName(message.name.trim().slice(0, 24));
+          }
           setChatMessages((prev) => {
             if (prev.some((m) => m.id === message.id)) return prev;
             const next = [
               ...prev,
               {
-                ...message,
+                id: message.id,
+                clientId: message.clientId,
+                text: message.text,
+                createdAt: message.createdAt,
+                senderName: message.name || 'Them',
                 mine: false,
               },
             ];
@@ -137,6 +148,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
           });
         },
       });
+      session.setDisplayName(myNameRef.current);
       sessionRef.current = session;
       await session.connect(normalized);
     },
@@ -236,6 +248,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
             clientId,
             text: text.trim().slice(0, 500),
             createdAt: sent.createdAt,
+            senderName: sent.name,
             mine: true,
           },
         ];
@@ -257,7 +270,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       chatMessages,
       myName,
       theirName,
-      setDisplayNames,
+      setMyName,
       createAndJoin,
       joinWithCode,
       leave,
@@ -276,7 +289,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       chatMessages,
       myName,
       theirName,
-      setDisplayNames,
+      setMyName,
       createAndJoin,
       joinWithCode,
       leave,

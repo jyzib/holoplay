@@ -73,7 +73,8 @@ export function DateChatPanel() {
               ]}
             >
               <Text style={styles.bubbleLabel}>
-                {item.mine ? myName : theirName} · {formatTime(item.createdAt)}
+                {item.senderName || (item.mine ? myName : theirName)} ·{' '}
+                {formatTime(item.createdAt)}
               </Text>
               <Text style={styles.bubbleText}>{item.text}</Text>
             </View>
