@@ -59,12 +59,14 @@ export default function PlayerScreen() {
     params.resumeAt ? Number(params.resumeAt) : 0
   );
   const [playerKey, setPlayerKey] = useState(0);
-  /** When true, iframe is hidden so video/audio stop immediately. */
   const [isPaused, setIsPaused] = useState(false);
+
   const localProgressRef = useRef(resumeAt);
-  const lastBroadcastKind = useRef<'playing' | 'paused' | null>(null);
+  /** Local desired playback state — prevents echo remounts. */
+  const intentRef = useRef<'playing' | 'paused'>('playing');
   const appliedRemoteRevision = useRef(0);
   const announcedMediaKey = useRef('');
+  const ignorePlayerEventsUntil = useRef(0);
 
   const media = useMemo(
     () => ({
@@ -92,20 +94,49 @@ export default function PlayerScreen() {
     });
   }, [media, resumeAt]);
 
-  const applyPaused = useCallback((progress: number) => {
-    localProgressRef.current = progress;
-    setResumeAt(Math.floor(progress));
-    setIsPaused(true);
+  const quietPlayerEvents = useCallback((ms = 3000) => {
+    ignorePlayerEventsUntil.current = Date.now() + ms;
   }, []);
 
-  const applyPlaying = useCallback((progress: number) => {
-    localProgressRef.current = progress;
-    setResumeAt(Math.floor(progress));
-    setIsPaused(false);
-    setPlayerKey((k) => k + 1);
-  }, []);
+  const applyPaused = useCallback(
+    (progress: number) => {
+      intentRef.current = 'paused';
+      localProgressRef.current = progress;
+      setResumeAt(Math.floor(progress));
+      setIsPaused(true);
+      quietPlayerEvents(2000);
+    },
+    [quietPlayerEvents]
+  );
 
-  // Partner control → apply locally (pause unmounts iframe instantly)
+  const applyPlaying = useCallback(
+    (progress: number, remount: boolean) => {
+      intentRef.current = 'playing';
+      localProgressRef.current = progress;
+      setResumeAt(Math.floor(progress));
+      setIsPaused(false);
+      quietPlayerEvents(3500);
+      if (remount) {
+        setPlayerKey((k) => k + 1);
+      }
+    },
+    [quietPlayerEvents]
+  );
+
+  const sendControl = useCallback(
+    (status: 'playing' | 'paused', progress: number) => {
+      if (!partnerConnected) return;
+      intentRef.current = status;
+      broadcastPlayback({
+        media,
+        status,
+        progress: Math.max(0, progress),
+      });
+    },
+    [partnerConnected, broadcastPlayback, media]
+  );
+
+  // Apply partner controls — status changes only (no progress tick remounts)
   useEffect(() => {
     if (!partnerConnected || remoteRevision === 0) return;
     if (remoteRevision === appliedRemoteRevision.current) return;
@@ -135,80 +166,73 @@ export default function PlayerScreen() {
       return;
     }
 
-    if (remote.status === 'paused') {
-      lastBroadcastKind.current = 'paused';
-      applyPaused(remote.progress);
+    const remoteStatus = remote.status;
+    const progress = remote.progress;
+    const drift = Math.abs(localProgressRef.current - progress);
+
+    // Already matching intent — ignore echo / progress-only updates
+    if (remoteStatus === intentRef.current) {
+      if (remoteStatus === 'playing' && drift > 20) {
+        // Large seek from partner while both playing
+        applyPlaying(progress, true);
+      } else if (remoteStatus === 'paused') {
+        localProgressRef.current = progress;
+        setResumeAt(Math.floor(progress));
+      }
       return;
     }
 
-    // playing / resume
-    const drift = Math.abs(localProgressRef.current - remote.progress);
-    if (!isPaused && drift < 2) {
-      // Already playing and close enough — skip remount flicker
-      localProgressRef.current = remote.progress;
+    if (remoteStatus === 'paused') {
+      applyPaused(progress);
       return;
     }
-    lastBroadcastKind.current = 'playing';
-    applyPlaying(remote.progress);
+
+    // Partner pressed play while we were paused
+    applyPlaying(progress, true);
   }, [
     partnerConnected,
     remoteRevision,
     syncState,
     media,
     router,
-    isPaused,
     applyPaused,
     applyPlaying,
   ]);
-
-  const publish = useCallback(
-    (status: 'playing' | 'paused', progress: number, force = false) => {
-      if (!partnerConnected) return;
-      if (shouldIgnoreLocalBroadcast()) return;
-
-      if (!force && lastBroadcastKind.current === status && status === 'playing') {
-        // Throttle progress-only playing updates
-        return;
-      }
-      if (!force && lastBroadcastKind.current === status && status === 'paused') {
-        return;
-      }
-
-      lastBroadcastKind.current = status;
-      broadcastPlayback({ media, status, progress });
-    },
-    [partnerConnected, shouldIgnoreLocalBroadcast, broadcastPlayback, media]
-  );
 
   const handlePlayerEvent = useCallback(
     (event: PlayerEvent) => {
       const { player_status, player_progress } = event.data;
       localProgressRef.current = player_progress;
 
+      // Ignore noisy events right after we remount / apply remote sync
+      if (Date.now() < ignorePlayerEventsUntil.current) return;
+      if (shouldIgnoreLocalBroadcast()) return;
+
       if (player_status === 'paused') {
-        setIsPaused(true);
-        setResumeAt(Math.floor(player_progress));
-        publish('paused', player_progress, true);
+        if (intentRef.current === 'paused') return;
+        applyPaused(player_progress);
+        sendControl('paused', player_progress);
         return;
       }
 
       if (player_status === 'seeked') {
         setResumeAt(Math.floor(player_progress));
-        if (isPaused) {
-          publish('paused', player_progress, true);
-        } else {
-          publish('playing', player_progress, true);
-        }
+        // Only sync seeks as control if intentional enough
+        sendControl(intentRef.current, player_progress);
         return;
       }
 
       if (player_status === 'playing') {
-        // Ignore play events while we intentionally paused for sync
-        if (isPaused) return;
-        publish('playing', player_progress, lastBroadcastKind.current !== 'playing');
+        // Do NOT broadcast periodic "playing" ticks — that caused remount loops
+        if (intentRef.current === 'paused') {
+          // User resumed from iframe controls
+          intentRef.current = 'playing';
+          setIsPaused(false);
+          sendControl('playing', player_progress);
+        }
       }
     },
-    [publish, isPaused]
+    [shouldIgnoreLocalBroadcast, applyPaused, sendControl]
   );
 
   const handleCompleted = useCallback(
@@ -240,11 +264,13 @@ export default function PlayerScreen() {
           title: nextMedia.title,
         });
         setResumeAt(0);
+        intentRef.current = 'playing';
         setIsPaused(false);
+        quietPlayerEvents(3500);
         setPlayerKey((k) => k + 1);
       }
     },
-    [router, media, partnerConnected, broadcastPlayback]
+    [router, media, partnerConnected, broadcastPlayback, quietPlayerEvents]
   );
 
   // Announce title once when opening / switching media while paired
@@ -259,7 +285,8 @@ export default function PlayerScreen() {
     if (key === announcedMediaKey.current) return;
     if (shouldIgnoreLocalBroadcast()) return;
     announcedMediaKey.current = key;
-    lastBroadcastKind.current = 'playing';
+    intentRef.current = 'playing';
+    // Load signal only — partner opens same title; avoid fighting over play ticks
     broadcastPlayback({
       media,
       status: 'playing',
@@ -271,19 +298,13 @@ export default function PlayerScreen() {
   const onSyncPause = () => {
     const progress = localProgressRef.current;
     applyPaused(progress);
-    lastBroadcastKind.current = 'paused';
-    if (partnerConnected && !shouldIgnoreLocalBroadcast()) {
-      broadcastPlayback({ media, status: 'paused', progress });
-    }
+    sendControl('paused', progress);
   };
 
   const onSyncPlay = () => {
     const progress = localProgressRef.current;
-    applyPlaying(progress);
-    lastBroadcastKind.current = 'playing';
-    if (partnerConnected && !shouldIgnoreLocalBroadcast()) {
-      broadcastPlayback({ media, status: 'playing', progress });
-    }
+    applyPlaying(progress, true);
+    sendControl('playing', progress);
   };
 
   return (
@@ -335,8 +356,8 @@ export default function PlayerScreen() {
             <Text style={styles.pausedTitle}>Paused</Text>
             <Text style={styles.pausedSub}>
               {partnerConnected
-                ? 'Synced for both of you — tap Play both when ready'
-                : 'Tap play in the player to continue'}
+                ? 'Synced — tap Play both when ready'
+                : 'Tap play to continue'}
             </Text>
             {partnerConnected ? (
               <Pressable style={styles.resumeBtn} onPress={onSyncPlay}>

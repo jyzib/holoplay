@@ -62,6 +62,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const seqRef = useRef(0);
   const applyRemoteUntilRef = useRef(0);
   const lastRemoteSeqRef = useRef(-1);
+  const lastSentRef = useRef<DateSyncState | null>(null);
 
   const [code, setCode] = useState<string | null>(null);
   const [status, setStatus] = useState<DateConnectionStatus>('idle');
@@ -106,6 +107,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       setChatMessages([]);
       seqRef.current = 0;
       lastRemoteSeqRef.current = -1;
+      lastSentRef.current = null;
 
       const session = new DateSyncSession({
         onStatus: (next, detail) => {
@@ -116,7 +118,8 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
         onRemoteState: (state) => {
           if (state.seq <= lastRemoteSeqRef.current) return;
           lastRemoteSeqRef.current = state.seq;
-          applyRemoteUntilRef.current = Date.now() + 2500;
+          // Ignore echo window — long enough for mobile iframe to settle
+          applyRemoteUntilRef.current = Date.now() + 4000;
           setSyncState(state);
           setRemoteRevision((n) => n + 1);
         },
@@ -191,6 +194,19 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       if (!partnerConnected || !sessionRef.current) return;
       if (shouldIgnoreLocalBroadcast()) return;
 
+      const prev = lastSentRef.current;
+      if (
+        prev?.media &&
+        prev.status === input.status &&
+        Math.abs(prev.progress - input.progress) < 1.5 &&
+        (prev.media.imdbId ?? prev.media.tmdbId) ===
+          (input.media.imdbId ?? input.media.tmdbId) &&
+        prev.media.season === input.media.season &&
+        prev.media.episode === input.media.episode
+      ) {
+        return;
+      }
+
       seqRef.current += 1;
       const next: DateSyncState = {
         media: input.media,
@@ -199,6 +215,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
         updatedAt: Date.now(),
         seq: seqRef.current,
       };
+      lastSentRef.current = next;
       setSyncState(next);
       sessionRef.current.sendState(next);
     },
