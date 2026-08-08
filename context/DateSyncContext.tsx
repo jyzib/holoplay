@@ -25,6 +25,7 @@ import type {
   DateSyncMedia,
   DateSyncState,
   DateSyncStatus,
+  VideoCallStatus,
 } from '../types/dateSync';
 
 interface DateSyncContextValue {
@@ -39,6 +40,9 @@ interface DateSyncContextValue {
   partnerTyping: boolean;
   myName: string;
   theirName: string;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  callStatus: VideoCallStatus;
   setMyName: (name: string) => Promise<void>;
   createAndJoin: () => Promise<string>;
   joinWithCode: (code: string) => Promise<void>;
@@ -52,6 +56,8 @@ interface DateSyncContextValue {
   markMessagesSeen: () => void;
   setTyping: (isTyping: boolean) => void;
   shouldIgnoreLocalBroadcast: () => boolean;
+  startVideoCall: () => Promise<void>;
+  endVideoCall: () => void;
 }
 
 const DateSyncContext = createContext<DateSyncContextValue | null>(null);
@@ -77,6 +83,9 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [myName, setMyNameState] = useState('You');
   const [theirName, setTheirName] = useState('Them');
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [callStatus, setCallStatus] = useState<VideoCallStatus>('idle');
   const myNameRef = useRef('You');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -111,6 +120,9 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       setChatMessages([]);
       setPartnerTyping(false);
       setTheirName('Them');
+      setLocalStream(null);
+      setRemoteStream(null);
+      setCallStatus('idle');
       seqRef.current = 0;
       lastRemoteSeqRef.current = -1;
       lastSentRef.current = null;
@@ -175,6 +187,19 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
             }, 4000);
           }
         },
+        onLocalStream: setLocalStream,
+        onRemoteStream: (stream) => {
+          setRemoteStream(stream);
+          if (stream) setCallStatus('active');
+        },
+        onCallInvite: () => {
+          setCallStatus((prev) => (prev === 'active' ? prev : 'connecting'));
+        },
+        onCallEnded: () => {
+          setCallStatus('idle');
+          setLocalStream(null);
+          setRemoteStream(null);
+        },
       });
       session.setDisplayName(myNameRef.current);
       sessionRef.current = session;
@@ -219,7 +244,30 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
     setSyncState(createEmptySyncState());
     setChatMessages([]);
     setPartnerTyping(false);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setCallStatus('idle');
   }, [teardown]);
+
+  const startVideoCall = useCallback(async () => {
+    if (!partnerConnected || !sessionRef.current) {
+      throw new Error('Partner is not connected yet');
+    }
+    setCallStatus('connecting');
+    try {
+      await sessionRef.current.startVideoCall();
+    } catch (err) {
+      setCallStatus('idle');
+      throw err;
+    }
+  }, [partnerConnected]);
+
+  const endVideoCall = useCallback(() => {
+    sessionRef.current?.endVideoCall();
+    setCallStatus('idle');
+    setLocalStream(null);
+    setRemoteStream(null);
+  }, []);
 
   const shouldIgnoreLocalBroadcast = useCallback(
     () => Date.now() < applyRemoteUntilRef.current,
@@ -322,6 +370,9 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       partnerTyping,
       myName,
       theirName,
+      localStream,
+      remoteStream,
+      callStatus,
       setMyName,
       createAndJoin,
       joinWithCode,
@@ -331,6 +382,8 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       markMessagesSeen,
       setTyping,
       shouldIgnoreLocalBroadcast,
+      startVideoCall,
+      endVideoCall,
     }),
     [
       supported,
@@ -344,6 +397,9 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       partnerTyping,
       myName,
       theirName,
+      localStream,
+      remoteStream,
+      callStatus,
       setMyName,
       createAndJoin,
       joinWithCode,
@@ -353,6 +409,8 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       markMessagesSeen,
       setTyping,
       shouldIgnoreLocalBroadcast,
+      startVideoCall,
+      endVideoCall,
     ]
   );
 

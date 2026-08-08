@@ -2,6 +2,8 @@ export type DateSyncStatus = 'playing' | 'paused';
 
 export type ChatDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'seen';
 
+export type VideoCallStatus = 'idle' | 'connecting' | 'active' | 'ended';
+
 export interface DateSyncMedia {
   type: 'movie' | 'tv';
   imdbId?: string;
@@ -53,7 +55,9 @@ export type DateSyncMessage =
       kind: 'typing';
       clientId: string;
       isTyping: boolean;
-    };
+    }
+  | { kind: 'call_invite'; clientId: string }
+  | { kind: 'call_end'; clientId: string };
 
 export type DateConnectionStatus =
   | 'idle'

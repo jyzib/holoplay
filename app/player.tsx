@@ -5,11 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { PlayerWebView } from '../components/PlayerWebView';
 import { DateChatPanel } from '../components/DateChatPanel';
+import { DateVideoCall } from '../components/DateVideoCall';
 import { useDateSync } from '../context/DateSyncContext';
 import { useKeyboardBottomInset } from '../hooks/useKeyboardBottomInset';
 import { colors, spacing, typography } from '../constants/theme';
 import { buildEmbedUrl } from '../services/vidapi';
 import type { PlayerEvent } from '../types/vidapi';
+
+type BottomPane = 'chat' | 'video';
 
 function sameMedia(
   a: {
@@ -56,8 +59,10 @@ export default function PlayerScreen() {
     remoteRevision,
     broadcastPlayback,
     shouldIgnoreLocalBroadcast,
+    callStatus,
   } = useDateSync();
 
+  const [bottomPane, setBottomPane] = useState<BottomPane>('chat');
   const [resumeAt, setResumeAt] = useState(
     params.resumeAt ? Number(params.resumeAt) : 0
   );
@@ -65,7 +70,6 @@ export default function PlayerScreen() {
   const [isPaused, setIsPaused] = useState(false);
 
   const localProgressRef = useRef(resumeAt);
-  /** Local desired playback state — prevents echo remounts. */
   const intentRef = useRef<'playing' | 'paused'>('playing');
   const appliedRemoteRevision = useRef(0);
   const announcedMediaKey = useRef('');
@@ -96,6 +100,14 @@ export default function PlayerScreen() {
       lang: 'en',
     });
   }, [media, resumeAt]);
+
+  // Incoming call opens the bottom video pane (movie stays on top)
+  useEffect(() => {
+    if (!partnerConnected) return;
+    if (callStatus === 'connecting') {
+      setBottomPane('video');
+    }
+  }, [partnerConnected, callStatus]);
 
   const quietPlayerEvents = useCallback((ms = 3000) => {
     ignorePlayerEventsUntil.current = Date.now() + ms;
@@ -139,7 +151,6 @@ export default function PlayerScreen() {
     [partnerConnected, broadcastPlayback, media]
   );
 
-  // Apply partner controls — status changes only (no progress tick remounts)
   useEffect(() => {
     if (!partnerConnected || remoteRevision === 0) return;
     if (remoteRevision === appliedRemoteRevision.current) return;
@@ -173,10 +184,8 @@ export default function PlayerScreen() {
     const progress = remote.progress;
     const drift = Math.abs(localProgressRef.current - progress);
 
-    // Already matching intent — ignore echo / progress-only updates
     if (remoteStatus === intentRef.current) {
       if (remoteStatus === 'playing' && drift > 20) {
-        // Large seek from partner while both playing
         applyPlaying(progress, true);
       } else if (remoteStatus === 'paused') {
         localProgressRef.current = progress;
@@ -190,7 +199,6 @@ export default function PlayerScreen() {
       return;
     }
 
-    // Partner pressed play while we were paused
     applyPlaying(progress, true);
   }, [
     partnerConnected,
@@ -207,7 +215,6 @@ export default function PlayerScreen() {
       const { player_status, player_progress } = event.data;
       localProgressRef.current = player_progress;
 
-      // Ignore noisy events right after we remount / apply remote sync
       if (Date.now() < ignorePlayerEventsUntil.current) return;
       if (shouldIgnoreLocalBroadcast()) return;
 
@@ -220,15 +227,12 @@ export default function PlayerScreen() {
 
       if (player_status === 'seeked') {
         setResumeAt(Math.floor(player_progress));
-        // Only sync seeks as control if intentional enough
         sendControl(intentRef.current, player_progress);
         return;
       }
 
       if (player_status === 'playing') {
-        // Do NOT broadcast periodic "playing" ticks — that caused remount loops
         if (intentRef.current === 'paused') {
-          // User resumed from iframe controls
           intentRef.current = 'playing';
           setIsPaused(false);
           sendControl('playing', player_progress);
@@ -276,7 +280,6 @@ export default function PlayerScreen() {
     [router, media, partnerConnected, broadcastPlayback, quietPlayerEvents]
   );
 
-  // Announce title once when opening / switching media while paired
   useEffect(() => {
     if (!partnerConnected) return;
     const key = [
@@ -289,7 +292,6 @@ export default function PlayerScreen() {
     if (shouldIgnoreLocalBroadcast()) return;
     announcedMediaKey.current = key;
     intentRef.current = 'playing';
-    // Load signal only — partner opens same title; avoid fighting over play ticks
     broadcastPlayback({
       media,
       status: 'playing',
@@ -309,6 +311,8 @@ export default function PlayerScreen() {
     applyPlaying(progress, true);
     sendControl('playing', progress);
   };
+
+  const callActive = callStatus === 'active' || callStatus === 'connecting';
 
   return (
     <View
@@ -382,8 +386,19 @@ export default function PlayerScreen() {
         )}
       </View>
 
-      {partnerConnected ? (
-        <DateChatPanel compact={keyboardOpen} />
+      {partnerConnected && bottomPane === 'chat' ? (
+        <DateChatPanel
+          compact={keyboardOpen}
+          onSwitchToVideo={() => setBottomPane('video')}
+          callActive={callActive}
+        />
+      ) : null}
+
+      {partnerConnected && bottomPane === 'video' ? (
+        <DateVideoCall
+          compact={keyboardOpen}
+          onSwitchToChat={() => setBottomPane('chat')}
+        />
       ) : null}
     </View>
   );

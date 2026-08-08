@@ -92,6 +92,17 @@ export type DateSyncHandlers = {
   }) => void;
   onChatAck: (id: string, status: 'delivered' | 'seen') => void;
   onTyping: (isTyping: boolean) => void;
+  onLocalStream: (stream: MediaStream | null) => void;
+  onRemoteStream: (stream: MediaStream | null) => void;
+  onCallInvite: () => void;
+  onCallEnded: () => void;
+};
+
+type MediaConnectionLike = {
+  peer: string;
+  answer: (stream?: MediaStream) => void;
+  close: () => void;
+  on: (event: string, cb: (...args: any[]) => void) => void;
 };
 
 type PeerLike = {
@@ -99,6 +110,7 @@ type PeerLike = {
   destroy: () => void;
   on: (event: string, cb: (...args: any[]) => void) => void;
   connect: (id: string) => DataConnectionLike;
+  call: (id: string, stream: MediaStream) => MediaConnectionLike;
 };
 
 type DataConnectionLike = {
@@ -117,6 +129,9 @@ type DataConnectionLike = {
 export class DateSyncSession {
   private peer: PeerLike | null = null;
   private conn: DataConnectionLike | null = null;
+  private mediaCall: MediaConnectionLike | null = null;
+  private localStream: MediaStream | null = null;
+  private remotePeerId: string | null = null;
   private clientId = '';
   private code = '';
   private displayName = 'You';
@@ -139,6 +154,12 @@ export class DateSyncSession {
         name: next,
       });
     }
+  }
+
+  private wirePeerCallHandler(peer: PeerLike) {
+    peer.on('call', (call: MediaConnectionLike) => {
+      void this.handleIncomingCall(call);
+    });
   }
 
   async connect(code: string): Promise<void> {
@@ -184,6 +205,7 @@ export class DateSyncSession {
         }
         this.isHost = true;
         this.peer = hostPeer;
+        this.wirePeerCallHandler(hostPeer);
         this.handlers.onStatus('waiting', 'Share this code — waiting for partner…');
         hostPeer.on('connection', (connection: DataConnectionLike) => {
           this.attachConnection(connection);
@@ -216,6 +238,7 @@ export class DateSyncSession {
     this.isHost = false;
     const guest = new PeerCtor();
     this.peer = guest;
+    this.wirePeerCallHandler(guest);
 
     await new Promise<void>((resolve) => {
       guest.on('open', () => {
@@ -282,8 +305,10 @@ export class DateSyncSession {
       }
     }
     this.conn = connection;
+    this.remotePeerId = connection.peer;
 
     const onOpen = () => {
+      this.remotePeerId = connection.peer;
       this.handlers.onPartner(true);
       this.handlers.onStatus('paired', 'Paired — play something together');
       this.send({
@@ -372,6 +397,16 @@ export class DateSyncSession {
     }
     if (msg.kind === 'typing' && msg.clientId !== this.clientId) {
       this.handlers.onTyping(!!msg.isTyping);
+      return;
+    }
+    if (msg.kind === 'call_invite' && msg.clientId !== this.clientId) {
+      this.handlers.onCallInvite();
+      return;
+    }
+    if (msg.kind === 'call_end' && msg.clientId !== this.clientId) {
+      this.stopLocalMedia(true);
+      this.handlers.onRemoteStream(null);
+      this.handlers.onCallEnded();
     }
   }
 
@@ -431,6 +466,98 @@ export class DateSyncSession {
     });
   }
 
+  async startVideoCall(): Promise<void> {
+    if (!this.peer || !this.remotePeerId) {
+      throw new Error('Partner is not connected yet');
+    }
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera is not available in this browser');
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: true,
+    });
+    this.localStream = stream;
+    this.handlers.onLocalStream(stream);
+    this.send({ kind: 'call_invite', clientId: this.clientId });
+
+    const call = this.peer.call(this.remotePeerId, stream);
+    this.bindMediaCall(call);
+  }
+
+  private async handleIncomingCall(call: MediaConnectionLike) {
+    try {
+      if (!this.localStream) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: true,
+        });
+        this.localStream = stream;
+        this.handlers.onLocalStream(stream);
+      }
+      call.answer(this.localStream);
+      this.bindMediaCall(call);
+      this.handlers.onCallInvite();
+    } catch {
+      try {
+        call.close();
+      } catch {
+        // ignore
+      }
+      this.handlers.onCallEnded();
+    }
+  }
+
+  private bindMediaCall(call: MediaConnectionLike) {
+    if (this.mediaCall && this.mediaCall !== call) {
+      try {
+        this.mediaCall.close();
+      } catch {
+        // ignore
+      }
+    }
+    this.mediaCall = call;
+    this.remotePeerId = call.peer || this.remotePeerId;
+
+    call.on('stream', (remote: MediaStream) => {
+      this.handlers.onRemoteStream(remote);
+    });
+    call.on('close', () => {
+      this.stopLocalMedia(false);
+      this.handlers.onRemoteStream(null);
+      this.handlers.onCallEnded();
+    });
+    call.on('error', () => {
+      this.endVideoCall();
+    });
+  }
+
+  endVideoCall() {
+    this.send({ kind: 'call_end', clientId: this.clientId });
+    this.stopLocalMedia(true);
+    this.handlers.onRemoteStream(null);
+    this.handlers.onCallEnded();
+  }
+
+  private stopLocalMedia(closeCall: boolean) {
+    if (closeCall && this.mediaCall) {
+      try {
+        this.mediaCall.close();
+      } catch {
+        // ignore
+      }
+      this.mediaCall = null;
+    }
+    if (this.localStream) {
+      for (const track of this.localStream.getTracks()) {
+        track.stop();
+      }
+      this.localStream = null;
+      this.handlers.onLocalStream(null);
+    }
+  }
+
   private send(message: DateSyncMessage) {
     if (!this.conn?.open) return;
     try {
@@ -447,6 +574,7 @@ export class DateSyncSession {
   disconnect() {
     this.destroyed = true;
     this.stopPing();
+    this.stopLocalMedia(true);
     try {
       this.conn?.close();
     } catch {
@@ -459,6 +587,7 @@ export class DateSyncSession {
     }
     this.conn = null;
     this.peer = null;
+    this.remotePeerId = null;
     this.handlers.onPartner(false);
     this.handlers.onStatus('idle');
   }

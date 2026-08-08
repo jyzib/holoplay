@@ -65,7 +65,15 @@ function StatusTicks({ status }: { status?: ChatDeliveryStatus }) {
   );
 }
 
-export function DateChatPanel({ compact = false }: { compact?: boolean }) {
+export function DateChatPanel({
+  compact = false,
+  onSwitchToVideo,
+  callActive = false,
+}: {
+  compact?: boolean;
+  onSwitchToVideo?: () => void;
+  callActive?: boolean;
+}) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const {
@@ -85,10 +93,7 @@ export function DateChatPanel({ compact = false }: { compact?: boolean }) {
   const wasTyping = useRef(false);
   const dragStartHeight = useRef(DEFAULT_HEIGHT);
 
-  const maxHeight = Math.max(
-    DEFAULT_HEIGHT,
-    Math.round(windowHeight * 0.72)
-  );
+  const maxHeight = Math.max(DEFAULT_HEIGHT, Math.round(windowHeight * 0.72));
   const midHeight = Math.round((DEFAULT_HEIGHT + maxHeight) / 2);
 
   const displayHeight = compact
@@ -203,8 +208,20 @@ export function DateChatPanel({ compact = false }: { compact?: boolean }) {
               {theirName} is typing…
             </Text>
           ) : (
-            <Text style={styles.dragHint}>Drag handle to resize</Text>
+            <Text style={styles.dragHint}>Drag to resize</Text>
           )}
+          {onSwitchToVideo ? (
+            <Pressable
+              onPress={onSwitchToVideo}
+              style={styles.modeSwitch}
+              hitSlop={8}
+              accessibilityLabel="Switch to video call"
+            >
+              <Ionicons name="videocam-outline" size={15} color={colors.text} />
+              <Text style={styles.modeSwitchText}>Video</Text>
+              {callActive ? <View style={styles.liveDot} /> : null}
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={toggleExpand}
             hitSlop={10}
@@ -334,6 +351,26 @@ const styles = StyleSheet.create({
     flex: 1,
     fontStyle: 'italic',
     textTransform: 'none',
+  },
+  modeSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+  },
+  modeSwitchText: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.success,
   },
   expandBtn: {
     width: 32,
