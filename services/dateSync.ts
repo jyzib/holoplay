@@ -90,6 +90,8 @@ export type DateSyncHandlers = {
     createdAt: number;
     name: string;
   }) => void;
+  onChatAck: (id: string, status: 'delivered' | 'seen') => void;
+  onTyping: (isTyping: boolean) => void;
 };
 
 type PeerLike = {
@@ -355,6 +357,21 @@ export class DateSyncSession {
         createdAt: msg.createdAt,
         name: msg.name || 'Them',
       });
+      // Immediate delivered ack
+      this.send({
+        kind: 'chat_ack',
+        clientId: this.clientId,
+        id: msg.id,
+        status: 'delivered',
+      });
+      return;
+    }
+    if (msg.kind === 'chat_ack' && msg.clientId !== this.clientId) {
+      this.handlers.onChatAck(msg.id, msg.status);
+      return;
+    }
+    if (msg.kind === 'typing' && msg.clientId !== this.clientId) {
+      this.handlers.onTyping(!!msg.isTyping);
     }
   }
 
@@ -395,6 +412,23 @@ export class DateSyncSession {
       name,
     });
     return { id, createdAt, name };
+  }
+
+  sendChatAck(id: string, status: 'delivered' | 'seen') {
+    this.send({
+      kind: 'chat_ack',
+      clientId: this.clientId,
+      id,
+      status,
+    });
+  }
+
+  sendTyping(isTyping: boolean) {
+    this.send({
+      kind: 'typing',
+      clientId: this.clientId,
+      isTyping,
+    });
   }
 
   private send(message: DateSyncMessage) {

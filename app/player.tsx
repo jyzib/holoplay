@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PlayerWebView } from '../components/PlayerWebView';
 import { DateChatPanel } from '../components/DateChatPanel';
 import { useDateSync } from '../context/DateSyncContext';
+import { useKeyboardBottomInset } from '../hooks/useKeyboardBottomInset';
 import { colors, spacing, typography } from '../constants/theme';
 import { buildEmbedUrl } from '../services/vidapi';
 import type { PlayerEvent } from '../types/vidapi';
@@ -36,6 +37,8 @@ function sameMedia(
 export default function PlayerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardBottomInset();
+  const keyboardOpen = keyboardInset > 40;
   const params = useLocalSearchParams<{
     type: 'movie' | 'tv';
     imdbId?: string;
@@ -308,22 +311,32 @@ export default function PlayerScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} style={styles.closeButton} hitSlop={12}>
-          <Ionicons name="close" size={28} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title} numberOfLines={1}>
-          {params.title ?? 'Now Playing'}
-        </Text>
-        <View style={styles.spacer}>
-          {partnerConnected ? (
-            <Ionicons name="heart" size={18} color={colors.netflixRed} />
-          ) : null}
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: insets.top,
+          paddingBottom: keyboardInset,
+        },
+      ]}
+    >
+      {!keyboardOpen ? (
+        <View style={styles.topBar}>
+          <Pressable onPress={() => router.back()} style={styles.closeButton} hitSlop={12}>
+            <Ionicons name="close" size={28} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title} numberOfLines={1}>
+            {params.title ?? 'Now Playing'}
+          </Text>
+          <View style={styles.spacer}>
+            {partnerConnected ? (
+              <Ionicons name="heart" size={18} color={colors.netflixRed} />
+            ) : null}
+          </View>
         </View>
-      </View>
+      ) : null}
 
-      {partnerConnected ? (
+      {partnerConnected && !keyboardOpen ? (
         <View style={styles.syncBar}>
           <Text style={styles.syncBanner}>Movie Date</Text>
           <View style={styles.syncControls}>
@@ -342,7 +355,7 @@ export default function PlayerScreen() {
         </View>
       ) : null}
 
-      <View style={styles.playerArea}>
+      <View style={[styles.playerArea, keyboardOpen && styles.playerAreaCompact]}>
         {!isPaused ? (
           <PlayerWebView
             key={playerKey}
@@ -369,7 +382,9 @@ export default function PlayerScreen() {
         )}
       </View>
 
-      {partnerConnected ? <DateChatPanel /> : null}
+      {partnerConnected ? (
+        <DateChatPanel compact={keyboardOpen} />
+      ) : null}
     </View>
   );
 }
@@ -437,6 +452,11 @@ const styles = StyleSheet.create({
   playerArea: {
     flex: 1,
     backgroundColor: '#000',
+    minHeight: 120,
+  },
+  playerAreaCompact: {
+    flex: 0.35,
+    minHeight: 100,
   },
   pausedOverlay: {
     flex: 1,

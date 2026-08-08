@@ -36,6 +36,7 @@ interface DateSyncContextValue {
   syncState: DateSyncState;
   remoteRevision: number;
   chatMessages: DateChatMessage[];
+  partnerTyping: boolean;
   myName: string;
   theirName: string;
   setMyName: (name: string) => Promise<void>;
@@ -48,6 +49,8 @@ interface DateSyncContextValue {
     progress: number;
   }) => void;
   sendChat: (text: string) => void;
+  markMessagesSeen: () => void;
+  setTyping: (isTyping: boolean) => void;
   shouldIgnoreLocalBroadcast: () => boolean;
 }
 
@@ -71,9 +74,11 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const [syncState, setSyncState] = useState<DateSyncState>(createEmptySyncState);
   const [remoteRevision, setRemoteRevision] = useState(0);
   const [chatMessages, setChatMessages] = useState<DateChatMessage[]>([]);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const [myName, setMyNameState] = useState('You');
   const [theirName, setTheirName] = useState('Them');
   const myNameRef = useRef('You');
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const teardown = useCallback(() => {
     sessionRef.current?.disconnect();
@@ -104,6 +109,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       setPartnerConnected(false);
       setSyncState(createEmptySyncState());
       setChatMessages([]);
+      setPartnerTyping(false);
       setTheirName('Them');
       seqRef.current = 0;
       lastRemoteSeqRef.current = -1;
@@ -128,6 +134,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
           if (clean) setTheirName(clean);
         },
         onChat: (message) => {
+          setPartnerTyping(false);
           if (message.name?.trim()) {
             setTheirName(message.name.trim().slice(0, 24));
           }
@@ -142,10 +149,31 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
                 createdAt: message.createdAt,
                 senderName: message.name || 'Them',
                 mine: false,
+                status: 'delivered' as const,
               },
             ];
             return next.length > MAX_CHAT ? next.slice(-MAX_CHAT) : next;
           });
+        },
+        onChatAck: (id, ackStatus) => {
+          setChatMessages((prev) =>
+            prev.map((m) => {
+              if (!m.mine || m.id !== id) return m;
+              const rank = { sending: 0, sent: 1, delivered: 2, seen: 3 } as const;
+              const current = m.status ?? 'sent';
+              if (rank[ackStatus] < rank[current]) return m;
+              return { ...m, status: ackStatus };
+            })
+          );
+        },
+        onTyping: (isTyping) => {
+          setPartnerTyping(isTyping);
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          if (isTyping) {
+            typingTimerRef.current = setTimeout(() => {
+              setPartnerTyping(false);
+            }, 4000);
+          }
         },
       });
       session.setDisplayName(myNameRef.current);
@@ -190,6 +218,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
     setPartnerConnected(false);
     setSyncState(createEmptySyncState());
     setChatMessages([]);
+    setPartnerTyping(false);
   }, [teardown]);
 
   const shouldIgnoreLocalBroadcast = useCallback(
@@ -237,6 +266,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const sendChat = useCallback(
     (text: string) => {
       if (!partnerConnected || !sessionRef.current) return;
+      sessionRef.current.sendTyping(false);
       const sent = sessionRef.current.sendChat(text);
       if (!sent) return;
       const clientId = sessionRef.current.getClientId();
@@ -250,10 +280,31 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
             createdAt: sent.createdAt,
             senderName: sent.name,
             mine: true,
+            status: 'sent' as const,
           },
         ];
         return next.length > MAX_CHAT ? next.slice(-MAX_CHAT) : next;
       });
+    },
+    [partnerConnected]
+  );
+
+  const markMessagesSeen = useCallback(() => {
+    if (!partnerConnected || !sessionRef.current) return;
+    const unseen = chatMessages.filter((m) => !m.mine && m.status !== 'seen');
+    if (unseen.length === 0) return;
+    for (const msg of unseen) {
+      sessionRef.current.sendChatAck(msg.id, 'seen');
+    }
+    setChatMessages((prev) =>
+      prev.map((m) => (!m.mine ? { ...m, status: 'seen' as const } : m))
+    );
+  }, [partnerConnected, chatMessages]);
+
+  const setTyping = useCallback(
+    (isTyping: boolean) => {
+      if (!partnerConnected || !sessionRef.current) return;
+      sessionRef.current.sendTyping(isTyping);
     },
     [partnerConnected]
   );
@@ -268,6 +319,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       syncState,
       remoteRevision,
       chatMessages,
+      partnerTyping,
       myName,
       theirName,
       setMyName,
@@ -276,6 +328,8 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       leave,
       broadcastPlayback,
       sendChat,
+      markMessagesSeen,
+      setTyping,
       shouldIgnoreLocalBroadcast,
     }),
     [
@@ -287,6 +341,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       syncState,
       remoteRevision,
       chatMessages,
+      partnerTyping,
       myName,
       theirName,
       setMyName,
@@ -295,6 +350,8 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       leave,
       broadcastPlayback,
       sendChat,
+      markMessagesSeen,
+      setTyping,
       shouldIgnoreLocalBroadcast,
     ]
   );

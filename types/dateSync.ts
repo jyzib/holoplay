@@ -1,5 +1,7 @@
 export type DateSyncStatus = 'playing' | 'paused';
 
+export type ChatDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'seen';
+
 export interface DateSyncMedia {
   type: 'movie' | 'tv';
   imdbId?: string;
@@ -25,6 +27,7 @@ export interface DateChatMessage {
   createdAt: number;
   senderName: string;
   mine?: boolean;
+  status?: ChatDeliveryStatus;
 }
 
 export type DateSyncMessage =
@@ -39,6 +42,17 @@ export type DateSyncMessage =
       text: string;
       createdAt: number;
       name: string;
+    }
+  | {
+      kind: 'chat_ack';
+      clientId: string;
+      id: string;
+      status: 'delivered' | 'seen';
+    }
+  | {
+      kind: 'typing';
+      clientId: string;
+      isTyping: boolean;
     };
 
 export type DateConnectionStatus =

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,11 +16,13 @@ import { FooterCredit } from '../../components/FooterCredit';
 import { Header } from '../../components/Header';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { useDateSync } from '../../context/DateSyncContext';
+import { useKeyboardBottomInset } from '../../hooks/useKeyboardBottomInset';
 import { colors, radius, spacing, typography } from '../../constants/theme';
 import { normalizeDateCode } from '../../services/dateSync';
 
 export default function DateScreen() {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardBottomInset();
   const { width } = useWindowDimensions();
   const isNarrow = width < 420;
   const {
@@ -90,15 +93,22 @@ export default function DateScreen() {
   const tabBarSpace = 72 + Math.max(insets.bottom, 10);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={insets.top}
+    >
       <Header title="Movie Date" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: tabBarSpace + spacing.lg },
+          {
+            paddingBottom: tabBarSpace + spacing.lg + keyboardInset,
+          },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
@@ -275,7 +285,7 @@ export default function DateScreen() {
 
         <FooterCredit />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
