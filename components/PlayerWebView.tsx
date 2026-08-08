@@ -15,6 +15,7 @@ import { colors, spacing, typography } from '../constants/theme';
 interface PlayerWebViewProps {
   embedUrl: string;
   onCompleted?: (event: PlayerEvent) => void;
+  onPlayerEvent?: (event: PlayerEvent) => void;
 }
 
 const MESSAGE_BRIDGE = `
@@ -32,7 +33,8 @@ const MESSAGE_BRIDGE = `
 
 async function handlePlayerPayload(
   payload: unknown,
-  onCompleted?: (event: PlayerEvent) => void
+  onCompleted?: (event: PlayerEvent) => void,
+  onPlayerEvent?: (event: PlayerEvent) => void
 ) {
   try {
     const data =
@@ -40,6 +42,7 @@ async function handlePlayerPayload(
     if (data?.type !== 'PLAYER_EVENT') return;
 
     await saveProgressFromEvent(data);
+    onPlayerEvent?.(data);
 
     if (data.data.player_status === 'completed') {
       onCompleted?.(data);
@@ -49,14 +52,20 @@ async function handlePlayerPayload(
   }
 }
 
-function WebPlayerIframe({ embedUrl, onCompleted }: PlayerWebViewProps) {
+function WebPlayerIframe({ embedUrl, onCompleted, onPlayerEvent }: PlayerWebViewProps) {
   const onCompletedRef = useRef(onCompleted);
   onCompletedRef.current = onCompleted;
+  const onPlayerEventRef = useRef(onPlayerEvent);
+  onPlayerEventRef.current = onPlayerEvent;
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      void handlePlayerPayload(event.data, onCompletedRef.current);
+      void handlePlayerPayload(
+        event.data,
+        onCompletedRef.current,
+        onPlayerEventRef.current
+      );
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -112,16 +121,30 @@ function WebPlayerIframe({ embedUrl, onCompleted }: PlayerWebViewProps) {
   );
 }
 
-export function PlayerWebView({ embedUrl, onCompleted }: PlayerWebViewProps) {
+export function PlayerWebView({
+  embedUrl,
+  onCompleted,
+  onPlayerEvent,
+}: PlayerWebViewProps) {
   const handleMessage = useCallback(
     async (event: WebViewMessageEvent) => {
-      await handlePlayerPayload(event.nativeEvent.data, onCompleted);
+      await handlePlayerPayload(
+        event.nativeEvent.data,
+        onCompleted,
+        onPlayerEvent
+      );
     },
-    [onCompleted]
+    [onCompleted, onPlayerEvent]
   );
 
   if (Platform.OS === 'web') {
-    return <WebPlayerIframe embedUrl={embedUrl} onCompleted={onCompleted} />;
+    return (
+      <WebPlayerIframe
+        embedUrl={embedUrl}
+        onCompleted={onCompleted}
+        onPlayerEvent={onPlayerEvent}
+      />
+    );
   }
 
   return (
