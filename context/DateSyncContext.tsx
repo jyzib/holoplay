@@ -14,10 +14,13 @@ import {
   clearSavedDateCode,
   createEmptySyncState,
   generateDateCode,
+  getChatNames,
   getSavedDateCode,
   normalizeDateCode,
+  saveChatNames,
 } from '../services/dateSync';
 import type {
+  DateChatMessage,
   DateConnectionStatus,
   DateSyncMedia,
   DateSyncState,
@@ -32,6 +35,10 @@ interface DateSyncContextValue {
   partnerConnected: boolean;
   syncState: DateSyncState;
   remoteRevision: number;
+  chatMessages: DateChatMessage[];
+  myName: string;
+  theirName: string;
+  setDisplayNames: (names: { myName: string; theirName: string }) => Promise<void>;
   createAndJoin: () => Promise<string>;
   joinWithCode: (code: string) => Promise<void>;
   leave: () => Promise<void>;
@@ -40,12 +47,14 @@ interface DateSyncContextValue {
     status: DateSyncStatus;
     progress: number;
   }) => void;
+  sendChat: (text: string) => void;
   shouldIgnoreLocalBroadcast: () => boolean;
 }
 
 const DateSyncContext = createContext<DateSyncContextValue | null>(null);
 
 const DRIFT_SECONDS = 2.5;
+const MAX_CHAT = 200;
 
 export function DateSyncProvider({ children }: { children: ReactNode }) {
   const supported = Platform.OS === 'web';
@@ -60,11 +69,32 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
   const [partnerConnected, setPartnerConnected] = useState(false);
   const [syncState, setSyncState] = useState<DateSyncState>(createEmptySyncState);
   const [remoteRevision, setRemoteRevision] = useState(0);
+  const [chatMessages, setChatMessages] = useState<DateChatMessage[]>([]);
+  const [myName, setMyName] = useState('You');
+  const [theirName, setTheirName] = useState('Them');
 
   const teardown = useCallback(() => {
     sessionRef.current?.disconnect();
     sessionRef.current = null;
   }, []);
+
+  useEffect(() => {
+    getChatNames().then((names) => {
+      setMyName(names.myName);
+      setTheirName(names.theirName);
+    });
+  }, []);
+
+  const setDisplayNames = useCallback(
+    async (names: { myName: string; theirName: string }) => {
+      const nextMine = names.myName.trim().slice(0, 24) || 'You';
+      const nextTheirs = names.theirName.trim().slice(0, 24) || 'Them';
+      setMyName(nextMine);
+      setTheirName(nextTheirs);
+      await saveChatNames({ myName: nextMine, theirName: nextTheirs });
+    },
+    []
+  );
 
   const startSession = useCallback(
     async (nextCode: string) => {
@@ -73,6 +103,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       setCode(normalized);
       setPartnerConnected(false);
       setSyncState(createEmptySyncState());
+      setChatMessages([]);
       seqRef.current = 0;
       lastRemoteSeqRef.current = -1;
 
@@ -85,9 +116,22 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
         onRemoteState: (state) => {
           if (state.seq <= lastRemoteSeqRef.current) return;
           lastRemoteSeqRef.current = state.seq;
-          applyRemoteUntilRef.current = Date.now() + 1500;
+          applyRemoteUntilRef.current = Date.now() + 2500;
           setSyncState(state);
           setRemoteRevision((n) => n + 1);
+        },
+        onChat: (message) => {
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === message.id)) return prev;
+            const next = [
+              ...prev,
+              {
+                ...message,
+                mine: false,
+              },
+            ];
+            return next.length > MAX_CHAT ? next.slice(-MAX_CHAT) : next;
+          });
         },
       });
       sessionRef.current = session;
@@ -130,6 +174,7 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
     setStatusDetail('');
     setPartnerConnected(false);
     setSyncState(createEmptySyncState());
+    setChatMessages([]);
   }, [teardown]);
 
   const shouldIgnoreLocalBroadcast = useCallback(
@@ -160,6 +205,29 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
     [partnerConnected, shouldIgnoreLocalBroadcast]
   );
 
+  const sendChat = useCallback(
+    (text: string) => {
+      if (!partnerConnected || !sessionRef.current) return;
+      const sent = sessionRef.current.sendChat(text);
+      if (!sent) return;
+      const clientId = sessionRef.current.getClientId();
+      setChatMessages((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: sent.id,
+            clientId,
+            text: text.trim().slice(0, 500),
+            createdAt: sent.createdAt,
+            mine: true,
+          },
+        ];
+        return next.length > MAX_CHAT ? next.slice(-MAX_CHAT) : next;
+      });
+    },
+    [partnerConnected]
+  );
+
   const value = useMemo<DateSyncContextValue>(
     () => ({
       supported,
@@ -169,10 +237,15 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       partnerConnected,
       syncState,
       remoteRevision,
+      chatMessages,
+      myName,
+      theirName,
+      setDisplayNames,
       createAndJoin,
       joinWithCode,
       leave,
       broadcastPlayback,
+      sendChat,
       shouldIgnoreLocalBroadcast,
     }),
     [
@@ -183,10 +256,15 @@ export function DateSyncProvider({ children }: { children: ReactNode }) {
       partnerConnected,
       syncState,
       remoteRevision,
+      chatMessages,
+      myName,
+      theirName,
+      setDisplayNames,
       createAndJoin,
       joinWithCode,
       leave,
       broadcastPlayback,
+      sendChat,
       shouldIgnoreLocalBroadcast,
     ]
   );

@@ -18,10 +18,25 @@ export interface DateSyncState {
   seq: number;
 }
 
+export interface DateChatMessage {
+  id: string;
+  clientId: string;
+  text: string;
+  createdAt: number;
+  mine?: boolean;
+}
+
 export type DateSyncMessage =
   | { kind: 'hello'; clientId: string; name?: string }
   | { kind: 'ping'; clientId: string }
-  | { kind: 'state'; clientId: string; state: DateSyncState };
+  | { kind: 'state'; clientId: string; state: DateSyncState }
+  | {
+      kind: 'chat';
+      clientId: string;
+      id: string;
+      text: string;
+      createdAt: number;
+    };
 
 export type DateConnectionStatus =
   | 'idle'

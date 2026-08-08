@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -24,6 +24,9 @@ export default function DateScreen() {
     status,
     statusDetail,
     partnerConnected,
+    myName,
+    theirName,
+    setDisplayNames,
     createAndJoin,
     joinWithCode,
     leave,
@@ -31,6 +34,13 @@ export default function DateScreen() {
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [myNameDraft, setMyNameDraft] = useState(myName);
+  const [theirNameDraft, setTheirNameDraft] = useState(theirName);
+
+  useEffect(() => {
+    setMyNameDraft(myName);
+    setTheirNameDraft(theirName);
+  }, [myName, theirName]);
 
   const onCreate = useCallback(async () => {
     setError(null);
@@ -61,6 +71,13 @@ export default function DateScreen() {
       setBusy(false);
     }
   }, [joinCode, joinWithCode]);
+
+  const onSaveNames = useCallback(() => {
+    void setDisplayNames({
+      myName: myNameDraft,
+      theirName: theirNameDraft,
+    });
+  }, [myNameDraft, theirNameDraft, setDisplayNames]);
 
   const statusColor =
     status === 'paired'
@@ -97,6 +114,34 @@ export default function DateScreen() {
         ) : (
           <>
             <View style={styles.card}>
+              <Text style={styles.namesTitle}>Chat names</Text>
+              <View style={styles.namesRow}>
+                <TextInput
+                  style={styles.nameInput}
+                  value={myNameDraft}
+                  onChangeText={setMyNameDraft}
+                  onBlur={onSaveNames}
+                  placeholder="Your name"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={24}
+                />
+                <TextInput
+                  style={styles.nameInput}
+                  value={theirNameDraft}
+                  onChangeText={setTheirNameDraft}
+                  onBlur={onSaveNames}
+                  placeholder="Their name"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={24}
+                />
+              </View>
+              <Text style={styles.namesHint}>
+                Chat will show “{theirNameDraft.trim() || 'Them'} ·” instead of
+                Partner
+              </Text>
+            </View>
+
+            <View style={styles.card}>
               <View style={styles.statusRow}>
                 <View style={[styles.dot, { backgroundColor: statusColor }]} />
                 <Text style={styles.statusText}>
@@ -116,8 +161,8 @@ export default function DateScreen() {
                   <Text style={styles.code}>{code}</Text>
                   <Text style={styles.codeHint}>
                     {partnerConnected
-                      ? 'Partner is connected — pick a movie and press Play.'
-                      : 'Ask your partner to enter this same code.'}
+                      ? `${theirName} is connected — pick a movie and press Play.`
+                      : `Ask ${theirName} to enter this same code.`}
                   </Text>
                 </View>
               ) : null}
@@ -156,7 +201,7 @@ export default function DateScreen() {
               <View style={styles.actions}>
                 {!partnerConnected ? (
                   <>
-                    <Text style={styles.or}>Partner has a different code?</Text>
+                    <Text style={styles.or}>Different code?</Text>
                     <View style={styles.joinRow}>
                       <TextInput
                         style={styles.input}
@@ -258,6 +303,30 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
   },
+  namesTitle: {
+    ...typography.subtitle,
+    color: colors.text,
+  },
+  namesRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  nameInput: {
+    flex: 1,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    color: colors.text,
+    fontSize: 15,
+    outlineStyle: 'none' as never,
+  },
+  namesHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -327,8 +396,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
     textAlign: 'center',
-    // @ts-expect-error web-only
-    outlineStyle: 'none',
+    outlineStyle: 'none' as never,
   },
   joinBtn: {
     backgroundColor: colors.netflixRed,

@@ -7,8 +7,29 @@ import type {
 
 const CODE_KEY = '@holoplay_date_code';
 const CLIENT_KEY = '@holoplay_date_client_id';
+const MY_NAME_KEY = '@holoplay_date_my_name';
+const THEIR_NAME_KEY = '@holoplay_date_their_name';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export async function getChatNames(): Promise<{ myName: string; theirName: string }> {
+  const [myName, theirName] = await Promise.all([
+    AsyncStorage.getItem(MY_NAME_KEY),
+    AsyncStorage.getItem(THEIR_NAME_KEY),
+  ]);
+  return {
+    myName: (myName ?? '').trim() || 'You',
+    theirName: (theirName ?? '').trim() || 'Them',
+  };
+}
+
+export async function saveChatNames(input: {
+  myName: string;
+  theirName: string;
+}): Promise<void> {
+  await AsyncStorage.setItem(MY_NAME_KEY, input.myName.trim().slice(0, 24));
+  await AsyncStorage.setItem(THEIR_NAME_KEY, input.theirName.trim().slice(0, 24));
+}
 
 export function normalizeDateCode(code: string): string {
   return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -61,6 +82,12 @@ export type DateSyncHandlers = {
   onStatus: (status: DateConnectionStatus, detail?: string) => void;
   onPartner: (connected: boolean) => void;
   onRemoteState: (state: DateSyncState, fromClientId: string) => void;
+  onChat: (message: {
+    id: string;
+    clientId: string;
+    text: string;
+    createdAt: number;
+  }) => void;
 };
 
 type PeerLike = {
@@ -282,6 +309,15 @@ export class DateSyncSession {
     }
     if (msg.kind === 'state' && msg.clientId !== this.clientId) {
       this.handlers.onRemoteState(msg.state, msg.clientId);
+      return;
+    }
+    if (msg.kind === 'chat' && msg.clientId !== this.clientId) {
+      this.handlers.onChat({
+        id: msg.id,
+        clientId: msg.clientId,
+        text: msg.text,
+        createdAt: msg.createdAt,
+      });
     }
   }
 
@@ -305,6 +341,21 @@ export class DateSyncSession {
       clientId: this.clientId,
       state,
     });
+  }
+
+  sendChat(text: string): { id: string; createdAt: number } | null {
+    const trimmed = text.trim();
+    if (!trimmed || !this.conn?.open) return null;
+    const id = `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const createdAt = Date.now();
+    this.send({
+      kind: 'chat',
+      clientId: this.clientId,
+      id,
+      text: trimmed.slice(0, 500),
+      createdAt,
+    });
+    return { id, createdAt };
   }
 
   private send(message: DateSyncMessage) {
